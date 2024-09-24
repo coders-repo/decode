@@ -7,7 +7,11 @@ const multer = require('multer');
 const fs = require('fs');
 const path = require('path');
 const { OpenAI } = require('openai');
-require('dotenv').config();
+require('dotenv').config({ path: '../.env' });
+
+
+// Now you can access your environment variables
+const apiKey = process.env.OPENAI_API_KEY;
 
 // Initialize OpenAI client
 const openai = new OpenAI({
