@@ -13,6 +13,11 @@ require('dotenv').config({ path: '../.env' });
 // Now you can access your environment variables
 const apiKey = process.env.OPENAI_API_KEY;
 
+// Load config file
+const SysPromtConfig = require('./config/sysPromptConfig.json');
+const logConfig = require('./config/logConfig'); // Load the log configuration
+const systemPrompt = SysPromtConfig.openai.policy.systemPrompt;
+
 // Initialize OpenAI client
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -53,6 +58,19 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB file size limit
 });
 
+function parseLogLine(line) {
+  const parsed = {};
+  
+  logConfig.mappings.forEach(mapping => {
+    const match = line.match(mapping.regex);
+    if (match) {
+      parsed[mapping.name] = match[0];
+    }
+  });
+  
+  return parsed;
+}
+
 function splitIntoChunks(text, chunkSize = 1000) {
   const chunks = [];
   let start = 0;
@@ -78,7 +96,9 @@ app.post('/api/upload-log', upload.single('file'), async (req, res) => {
 
     let logData = '';
     for await (const line of rl) {
-      logData += `${line}\n`;
+      const parsedLine = parseLogLine(line);
+      // logData += `${line}\n`;
+      logData += JSON.stringify(parsedLine) + '\n';
     }
 
     // Split logData into smaller chunks
@@ -89,7 +109,7 @@ app.post('/api/upload-log', upload.single('file'), async (req, res) => {
 
       const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: summaryPrompt }],
+        messages: [systemPrompt,{ role: 'user', content: summaryPrompt }],
         max_tokens: 1500,
       });
 
@@ -131,7 +151,7 @@ app.post('/api/chat-continue', async (req, res) => {
   
       const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: chatPrompt }],
+        messages: [systemPrompt,{ role: 'user', content: chatPrompt }],
         max_tokens: 1500,
       });
   
