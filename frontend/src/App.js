@@ -61,13 +61,15 @@ function App() {
               { fileUrl: input.toLowerCase() }
             );
 
-            let { fileList } = response.data;
-            setnumberOfFiles(fileList);
+            let { fileDetails } = response.data;
+            console.log(JSON.stringify(fileDetails));
+
+            setnumberOfFiles(fileDetails);
             setMessages([
               ...newMessages,
               {
                 text: "Here is the list of files",
-                fileList: fileList,
+                fileDetails: fileDetails,
                 sender: "bot",
               },
             ]);
@@ -240,10 +242,10 @@ function App() {
           <>
             <div key={index} className={`message ${message.sender}`}>
               {message.text}
-              {message.fileList && (
+              {message.fileDetails && (
                 <ul>
                   {numberOfFiles.map((fileNum, ind) => (
-                    <li key={fileNum}>{fileNum}</li>
+                    <li key={fileNum}>{fileNum.name}</li>
                   ))}
                 </ul>
               )}

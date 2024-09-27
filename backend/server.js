@@ -170,14 +170,22 @@ app.post("/api/fileurl", async (req, res) => {
           .json({ error: "Directory not found or inaccessible" });
       }
 
-      // Filter only the files, excluding directories
-      const fileList = files.filter((file) =>
-        fs.statSync(path.join(fileUrl, file)).isFile()
-      );
+      // Prepare an array to hold file details
+      const fileDetails = files.map((file) => {
+        const filePath = path.join(fileUrl, file);
+        const stats = fs.statSync(filePath); // Get file statistics
+        const fileType = stats.isFile()
+          ? path.extname(file) || "unknown"
+          : "directory"; // Get file extension or mark as directory
+        return {
+          name: file,
+          type: fileType, // .txt, .json, etc. for files
+          size: stats.size, // File size in bytes
+          modifiedDate: stats.mtime, // Date of last modification
+        };
+      });
 
-      // Log the list of files and return the response
-      console.log(fileList);
-      res.json({ fileList });
+      res.json({ fileDetails });
     });
   } catch (error) {
     // Catch any other unexpected errors
