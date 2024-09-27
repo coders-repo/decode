@@ -113,12 +113,10 @@ app.post("/api/upload-log", upload.single("file"), async (req, res) => {
     });
   } catch (error) {
     console.error("Error processing log file:", error);
-    res
-      .status(500)
-      .json({
-        error: "An error occurred while processing your log file.",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "An error occurred while processing your log file.",
+      details: error.message,
+    });
   }
 });
 
@@ -130,11 +128,9 @@ app.post("/api/chat-continue", async (req, res) => {
     // Retrieve log analysis from the session
     const logAnalysis = req.session.logAnalysis;
     if (!logAnalysis) {
-      return res
-        .status(400)
-        .json({
-          error: "No log analysis available. Please upload a log file first.",
-        });
+      return res.status(400).json({
+        error: "No log analysis available. Please upload a log file first.",
+      });
     }
 
     const chatPrompt = `Based on the following log analysis, answer the question:\n\nAnalysis:\n${logAnalysis}\n\nQuestion: ${question}`;
@@ -152,15 +148,44 @@ app.post("/api/chat-continue", async (req, res) => {
     res.json({ answer: response.choices[0].message.content.trim() });
   } catch (error) {
     console.error("Error processing chat question:", error);
-    res
-      .status(500)
-      .json({
-        error: "Error processing your question.",
-        details: error.message,
-      });
+    res.status(500).json({
+      error: "Error processing your question.",
+      details: error.message,
+    });
   }
 });
 
+// get file list
+app.post("/api/fileurl", async (req, res) => {
+  // let fileUrl = "C:/Users/dheeraj.kumar/Work/logfiles";
+  let { fileUrl } = req.body;
+
+  try {
+    // Check if the provided path exists and is accessible
+    fs.readdir(fileUrl, (err, files) => {
+      if (err) {
+        // Error handling for inaccessible directory or wrong path
+        return res
+          .status(400)
+          .json({ error: "Directory not found or inaccessible" });
+      }
+
+      // Filter only the files, excluding directories
+      const fileList = files.filter((file) =>
+        fs.statSync(path.join(fileUrl, file)).isFile()
+      );
+
+      // Log the list of files and return the response
+      console.log(fileList);
+      res.json({ fileList });
+    });
+  } catch (error) {
+    // Catch any other unexpected errors
+    console.log(error);
+    console.error("Error reading directory: ", error);
+    res.status(500).json({ error: "An unexpected error occurred" });
+  }
+});
 const PORT = 5001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
