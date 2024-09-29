@@ -38,7 +38,7 @@ function App() {
     // After file is uploaded, user can ask questions about the log file
     else if (isUploaded) {
       try {
-        const response = await axios.post(`${apiUrl}/api/chat-continue`, { question: input });
+        const response = await axios.post('http://localhost:5001/api/chat-continue', { question: input });
         console.log('response',response);
         const answer = response.data.answer;
         setMessages([...newMessages, { text: answer, sender: 'bot' }]);
@@ -74,7 +74,7 @@ function App() {
 
     try {
       setLoading(true);
-      const response = await axios.post(`${apiUrl}/api/upload-log`, formData, {
+      const response = await axios.post('http://localhost:5001/api/upload-log', formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
