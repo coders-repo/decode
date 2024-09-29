@@ -1,6 +1,4 @@
 const express = require('express');
-const session = require('express-session');
-const MemoryStore = require('memorystore')(session);
 const readline = require('readline');
 const cors = require('cors');
 const multer = require('multer');
@@ -10,8 +8,9 @@ const { OpenAI } = require('openai');
 require('dotenv').config({ path: '../.env' });
 
 
-// Now you can access your environment variables
-const apiKey = process.env.OPENAI_API_KEY;
+// environment variables access
+const apiKey = process.env.OPENAI_API_KEY; // open api key
+const origin = process.env.ORIGIN  // domain access
 
 // Load config file
 const SysPromtConfig = require('./config/sysPromptConfig.json');
@@ -25,23 +24,15 @@ const openai = new OpenAI({
 
 const app = express();
 app.use(cors({
-  origin: 'http://localhost:3000',
+  origin: origin,
   credentials: true,
-}));
-
-// Session setup with MemoryStore
-app.use(session({
-  store: new MemoryStore({
-    checkPeriod: 86400000, // 24 hours
-  }),
-  secret: process.env.SESSION_SECRET || 'secret_key', // Use your session secret
-  resave: false,
-  saveUninitialized: false,
-  cookie: { secure: false }, // Set to true if using HTTPS
 }));
 
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ limit: '50mb', extended: true }));
+
+// In-memory vector store
+let vectorStore = [];
 
 // Multer setup
 const storage = multer.diskStorage({
@@ -58,6 +49,29 @@ const upload = multer({
   limits: { fileSize: 50 * 1024 * 1024 }, // 50MB file size limit
 });
 
+// Function to calculate cosine similarity
+function cosineSimilarity(vecA, vecB) {
+  const dotProduct = vecA.reduce((acc, curr, idx) => acc + curr * vecB[idx], 0);
+  const magnitudeA = Math.sqrt(vecA.reduce((acc, curr) => acc + curr * curr, 0));
+  const magnitudeB = Math.sqrt(vecB.reduce((acc, curr) => acc + curr * curr, 0));
+  return dotProduct / (magnitudeA * magnitudeB);
+}
+
+// Function to add data to vector store
+async function addToVectorStore(parsedLine, textChunk, metadata) {
+  // Generate embedding using OpenAI's embeddings model
+  const embeddingResponse = await openai.embeddings.create({
+    model: 'text-embedding-ada-002',
+    input: textChunk,
+  });
+  const vector = embeddingResponse.data[0].embedding;
+  vectorStore.push({
+    vector: vector, // Store the generated vector
+    metadata: parsedLine, // Include metadata like timestamp, log level, error
+  });
+}
+
+// Parse log lines based on regex patterns in logConfig
 function parseLogLine(line) {
   const parsed = {};
   
@@ -69,16 +83,6 @@ function parseLogLine(line) {
   });
   
   return parsed;
-}
-
-function splitIntoChunks(text, chunkSize = 1000) {
-  const chunks = [];
-  let start = 0;
-  while (start < text.length) {
-    chunks.push(text.slice(start, start + chunkSize));
-    start += chunkSize;
-  }
-  return chunks;
 }
 
 app.post('/api/upload-log', upload.single('file'), async (req, res) => {
@@ -97,74 +101,67 @@ app.post('/api/upload-log', upload.single('file'), async (req, res) => {
     let logData = '';
     for await (const line of rl) {
       const parsedLine = parseLogLine(line);
-      // logData += `${line}\n`;
-      logData += JSON.stringify(parsedLine) + '\n';
-    }
+      const textChunk = JSON.stringify(parsedLine);
+      logData += textChunk + '\n';
 
-    // Split logData into smaller chunks
-    const logChunks = splitIntoChunks(logData, 2000); // Example: 2000 characters per chunk
-    let analysis = '';
-    for (const chunk of logChunks) {
-      const summaryPrompt = `Summarize the following log file and identify anomalies, errors, and warnings:\n\n${chunk}`;
-
-      const response = await openai.chat.completions.create({
-        model: 'gpt-3.5-turbo',
-        messages: [systemPrompt,{ role: 'user', content: summaryPrompt }],
-        max_tokens: 1500,
+      // Add the parsed line and metadata to vectorStore
+      console.log('parsed line',parsedLine);
+      await addToVectorStore(parsedLine, textChunk, {
+        timestamp: parsedLine.timestamp,
+        logLevel: parsedLine.logLevel,
+        policyNumber: parsedLine.policyNumber,
+        error: parsedLine.error,
       });
-
-      analysis += response.choices[0].message.content.trim() + '\n';
     }
-
-    // Store the analysis in the session
-    req.session.logAnalysis = analysis;
-    
-
-    // Ensure session is saved before responding
-    req.session.save(err => {
-      if (err) {
-        console.error('Session save error:', err);
-        return res.status(500).json({ error: 'Failed to save session data.' });
-      }
-      console.log('saving',analysis);
-      res.json({ analysis });
-    });
-
+    res.json({ message: 'Log file processed and vectorized', vectorStore });
   } catch (error) {
     console.error('Error processing log file:', error);
     res.status(500).json({ error: 'An error occurred while processing your log file.', details: error.message });
   }
 });
 
-// New endpoint for chat questions about the log file
+// Endpoint for chat questions with similarity search
 app.post('/api/chat-continue', async (req, res) => {
-    try {
-      const { question } = req.body;
-        console.log('*****log is,',req.session);
-      // Retrieve log analysis from the session
-      const logAnalysis = req.session.logAnalysis;
-      if (!logAnalysis) {
-        return res.status(400).json({ error: 'No log analysis available. Please upload a log file first.' });
+  try {
+    const { question } = req.body;
+
+    // Generate embedding for the question
+    const queryEmbeddingResponse = await openai.embeddings.create({
+      model: 'text-embedding-ada-002',
+      input: question,
+    });
+    const queryVector = queryEmbeddingResponse.data[0].embedding;
+
+    // Perform similarity search
+    let bestMatch = null;
+    let highestSimilarity = -1;
+
+    vectorStore.forEach(item => {
+      const similarity = cosineSimilarity(queryVector, item.vector);
+      if (similarity > highestSimilarity) {
+        highestSimilarity = similarity;
+        bestMatch = item;
       }
-  
-      const chatPrompt = `Based on the following log analysis, answer the question:\n\nAnalysis:\n${logAnalysis}\n\nQuestion: ${question}`;
-  
+    });
+    
+    // trigger the gpt only when we have the exact match
+    if (bestMatch) {
+      const chatPrompt = `${JSON.stringify(bestMatch.metadata)}\n\nQuestion: ${question}`;
       const response = await openai.chat.completions.create({
         model: 'gpt-3.5-turbo',
         messages: [systemPrompt,{ role: 'user', content: chatPrompt }],
         max_tokens: 1500,
       });
-  
-      if (!response || !response.choices || !response.choices[0]) {
-        throw new Error('OpenAI response is incomplete or missing');
-      }
-  
+
       res.json({ answer: response.choices[0].message.content.trim() });
-    } catch (error) {
-      console.error('Error processing chat question:', error);
-      res.status(500).json({ error: 'Error processing your question.', details: error.message });
+    } else {
+      res.status(404).json({ error: 'No relevant log data found for the query.' });
     }
-  });
+  } catch (error) {
+    console.error('Error processing chat question:', error);
+    res.status(500).json({ error: 'Error processing your question.', details: error.message });
+  }
+});
 
 const PORT = 5001;
 app.listen(PORT, () => {

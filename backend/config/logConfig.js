@@ -23,7 +23,7 @@ const logConfig = {
       },
       {
         name: "policyNumber",
-        regex: /\b\d{12}\b/, // Regex for identifying 12-digit policy numbers
+        regex: /\b\d{9}\b/, // Regex for identifying 12-digit policy numbers
         description: "A policy number associated with the log entry."
       },
       {
@@ -36,3 +36,4 @@ const logConfig = {
   
   module.exports = logConfig;
   
+ 
