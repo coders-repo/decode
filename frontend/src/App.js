@@ -8,9 +8,10 @@ function App() {
   const [file, setFile] = useState(null);
   const [uploadMode, setUploadMode] = useState(null); // Track upload or URL input
   const [isUploaded, setIsUploaded] = useState(false); // Track if the file has been uploaded
-  const [logAnalysis, setLogAnalysis] = useState(''); // Store log analysis
-  const [parsedAnalysis, setParsedAnalysis] = useState({}); // Store parsed analysis
-  const [logMetadata, setLogMetadata] = useState([]); // Store log metadata
+
+  const [loading, setLoading] = useState(false);
+
+  const apiUrl = process.env.REACT_APP_API_URL;
 
   // This function is triggered when user sends a message
   const handleSendMessage = async () => {
@@ -37,7 +38,7 @@ function App() {
     // After file is uploaded, user can ask questions about the log file
     else if (isUploaded) {
       try {
-        const response = await axios.post('http://localhost:5001/api/chat-continue', { question: input });
+        const response = await axios.post(`${apiUrl}/api/chat-continue`, { question: input });
         console.log('response',response);
         const answer = response.data.answer;
         setMessages([...newMessages, { text: answer, sender: 'bot' }]);
@@ -72,7 +73,8 @@ function App() {
     formData.append('file', file);
 
     try {
-      const response = await axios.post('http://localhost:5001/api/upload-log', formData, {
+      setLoading(true);
+      const response = await axios.post(`${apiUrl}/api/upload-log`, formData, {
         headers: { 'Content-Type': 'multipart/form-data' },
       });
 
@@ -80,46 +82,15 @@ function App() {
 
       // const { analysis, metadata } = response.data;
       setMessages([...messages, { text: 'File uploaded and processed. Here is the analysis:', sender: 'bot' }]);
-      // setLogAnalysis(analysis);
-      // setParsedAnalysis(parseLogAnalysis(analysis)); // Parse and store the structured log analysis
-      // setLogMetadata(metadata); // Store log metadata (timestamp, log level, error)
       setIsUploaded(true); // Mark as uploaded
       setUploadMode(null); // Exit upload mode
     } catch (error) {
       console.error('Error uploading file:', error);
       setMessages([...messages, { text: 'Error uploading file.', sender: 'bot' }]);
+    } finally {
+      setLoading(false); // Set loading state back to false once request finishes
     }
   };
-
-  // Function to parse the log analysis string into an object for easy rendering
-  // const parseLogAnalysis = (analysis) => {
-  //   const errors = [];
-  //   const warnings = [];
-  //   const patterns = [];
-
-  //   const lines = analysis.split('\n');
-  //   let currentSection = '';
-
-  //   lines.forEach(line => {
-  //     if (line.includes('Errors:')) {
-  //       currentSection = 'errors';
-  //     } else if (line.includes('Warnings:')) {
-  //       currentSection = 'warnings';
-  //     } else if (line.includes('Unusual Patterns:')) {
-  //       currentSection = 'patterns';
-  //     } else if (line.trim()) {
-  //       if (currentSection === 'errors') {
-  //         errors.push(line);
-  //       } else if (currentSection === 'warnings') {
-  //         warnings.push(line);
-  //       } else if (currentSection === 'patterns') {
-  //         patterns.push(line);
-  //       }
-  //     }
-  //   });
-
-  //   return { errors, warnings, patterns };
-  // };
 
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
@@ -128,62 +99,20 @@ function App() {
   return (
     <div className="chat-container">
       <div className="chat-box">
-        {/* Log analysis always appears first */}
-        {isUploaded && logAnalysis && (
-          <div className="message bot">
-            <h2>Log Analysis</h2>
-            {parsedAnalysis.errors.length > 0 && (
-              <div>
-                <h3>Errors</h3>
-                <ul>
-                  {parsedAnalysis.errors.map((error, index) => (
-                    <li key={index}>{error}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {parsedAnalysis.warnings.length > 0 && (
-              <div>
-                <h3>Warnings</h3>
-                <ul>
-                  {parsedAnalysis.warnings.map((warning, index) => (
-                    <li key={index}>{warning}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {parsedAnalysis.patterns.length > 0 && (
-              <div>
-                <h3>Unusual Patterns</h3>
-                <ul>
-                  {parsedAnalysis.patterns.map((pattern, index) => (
-                    <li key={index}>{pattern}</li>
-                  ))}
-                </ul>
-              </div>
-            )}
-            {logMetadata.length > 0 && (
-              <div>
-                <h3>Log Metadata</h3>
-                <ul>
-                  {logMetadata.map((meta, index) => (
-                    <li key={index}>
-                      Timestamp: {meta.timestamp}, Log Level: {meta.logLevel}, Error: {meta.error}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+       
+
+        {/* Messages always come after the log analysis */}
+        {messages.map((message, index) => (
+          <div key={index} className={`message ${message.sender}`}>
+            {message.text}
+          </div>
+        ))}
+         {/* Loader will appear here when loading is true */}
+        {loading && (
+          <div className="loading-spinner">
           </div>
         )}
-
-    {/* Messages always come after the log analysis */}
-    {messages.map((message, index) => (
-      <div key={index} className={`message ${message.sender}`}>
-        {message.text}
       </div>
-    ))}
-  </div>
 
 
       {/* Input container remains available for further interaction */}
