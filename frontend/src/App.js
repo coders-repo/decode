@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import axios from "axios";
+import "bootstrap/dist/css/bootstrap.min.css";
 import "./App.css";
 
 function App() {
@@ -11,6 +12,7 @@ function App() {
   const [logAnalysis, setLogAnalysis] = useState(""); // Store log analysis
   const [parsedAnalysis, setParsedAnalysis] = useState({}); // Store parsed analysis
   const [numberOfFiles, setnumberOfFiles] = useState([]);
+  const [visibleItems, setVisibleItems] = useState(5);
   // let url = "C:/Users/dheeraj.kumar/Work/logfiles";
 
   //URL validation function
@@ -65,10 +67,11 @@ function App() {
             console.log(JSON.stringify(fileDetails));
 
             setnumberOfFiles(fileDetails);
+
             setMessages([
               ...newMessages,
               {
-                text: "Here is the list of files",
+                text: `${fileDetails.length} - Files found`,
                 fileDetails: fileDetails,
                 sender: "bot",
               },
@@ -195,6 +198,11 @@ function App() {
   const handleFileChange = (event) => {
     setFile(event.target.files[0]);
   };
+
+  const loadMore = () => {
+    setVisibleItems((prevVisibleItems) => prevVisibleItems + 5); // Load 5 more items
+  };
+
   console.log(messages);
 
   return (
@@ -241,11 +249,11 @@ function App() {
         {messages.map((message, index) => (
           <>
             <div key={index} className={`message ${message.sender}`}>
-              {message.text}
+              <div>{message.text}</div>
               {message.fileDetails && (
                 <ul>
-                  {numberOfFiles.map((fileNum, ind) => (
-                    <li key={fileNum}>{fileNum.name}</li>
+                  {numberOfFiles.slice(0, 5).map((fileNum, ind) => (
+                    <li key={fileNum.name}>{fileNum.name}</li>
                   ))}
                 </ul>
               )}

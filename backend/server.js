@@ -155,9 +155,7 @@ app.post("/api/chat-continue", async (req, res) => {
   }
 });
 
-// get file list
 app.post("/api/fileurl", async (req, res) => {
-  // let fileUrl = "C:/Users/dheeraj.kumar/Work/logfiles";
   let { fileUrl } = req.body;
 
   try {
@@ -181,8 +179,18 @@ app.post("/api/fileurl", async (req, res) => {
           name: file,
           type: fileType, // .txt, .json, etc. for files
           size: stats.size, // File size in bytes
-          modifiedDate: stats.mtime, // Date of last modification
+          modifiedDate: stats.mtime, // Date and time of last modification
         };
+      });
+
+      // Sort the file details by modifiedDate (including time) in ascending order
+      // Tie-breaking based on the file name if modifiedDate is the same
+      fileDetails.sort((a, b) => {
+        const timeDiff = new Date(a.modifiedDate) - new Date(b.modifiedDate);
+        if (timeDiff === 0) {
+          return a.name.localeCompare(b.name); // Tie-breaker: sort by file name alphabetically
+        }
+        return timeDiff;
       });
 
       res.json({ fileDetails });
@@ -194,6 +202,7 @@ app.post("/api/fileurl", async (req, res) => {
     res.status(500).json({ error: "An unexpected error occurred" });
   }
 });
+
 const PORT = 5001;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
