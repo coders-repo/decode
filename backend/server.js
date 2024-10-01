@@ -37,11 +37,11 @@ let vectorStore = [];
 // Multer setup
 const storage = multer.diskStorage({
   destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+    cb(null, "uploads/");
   },
   filename: function (req, file, cb) {
     cb(null, Date.now() + path.extname(file.originalname));
-  }
+  },
 });
 
 const upload = multer({
@@ -85,10 +85,10 @@ function parseLogLine(line) {
   return parsed;
 }
 
-app.post('/api/upload-log', upload.single('file'), async (req, res) => {
+app.post("/api/upload-log", upload.single("file"), async (req, res) => {
   try {
     if (!req.file) {
-      return res.status(400).json({ error: 'No file uploaded' });
+      return res.status(400).json({ error: "No file uploaded" });
     }
 
     const filePath = req.file.path;
@@ -98,7 +98,7 @@ app.post('/api/upload-log', upload.single('file'), async (req, res) => {
       crlfDelay: Infinity,
     });
 
-    let logData = '';
+    let logData = "";
     for await (const line of rl) {
       const parsedLine = parseLogLine(line);
       const textChunk = JSON.stringify(parsedLine);
@@ -115,8 +115,11 @@ app.post('/api/upload-log', upload.single('file'), async (req, res) => {
     }
     res.json({ message: 'Log file processed and vectorized', vectorStore });
   } catch (error) {
-    console.error('Error processing log file:', error);
-    res.status(500).json({ error: 'An error occurred while processing your log file.', details: error.message });
+    console.error("Error processing log file:", error);
+    res.status(500).json({
+      error: "An error occurred while processing your log file.",
+      details: error.message,
+    });
   }
 });
 
@@ -160,6 +163,54 @@ app.post('/api/chat-continue', async (req, res) => {
   } catch (error) {
     console.error('Error processing chat question:', error);
     res.status(500).json({ error: 'Error processing your question.', details: error.message });
+  }
+});
+
+app.post("/api/fileurl", async (req, res) => {
+  let { fileUrl } = req.body;
+
+  try {
+    // Check if the provided path exists and is accessible
+    fs.readdir(fileUrl, (err, files) => {
+      if (err) {
+        // Error handling for inaccessible directory or wrong path
+        return res
+          .status(400)
+          .json({ error: "Directory not found or inaccessible" });
+      }
+
+      // Prepare an array to hold file details
+      const fileDetails = files.map((file) => {
+        const filePath = path.join(fileUrl, file);
+        const stats = fs.statSync(filePath); // Get file statistics
+        const fileType = stats.isFile()
+          ? path.extname(file) || "unknown"
+          : "directory"; // Get file extension or mark as directory
+        return {
+          name: file,
+          type: fileType, // .txt, .json, etc. for files
+          size: stats.size, // File size in bytes
+          modifiedDate: stats.mtime, // Date and time of last modification
+        };
+      });
+
+      // Sort the file details by modifiedDate (including time) in ascending order
+      // Tie-breaking based on the file name if modifiedDate is the same
+      fileDetails.sort((a, b) => {
+        const timeDiff = new Date(a.modifiedDate) - new Date(b.modifiedDate);
+        if (timeDiff === 0) {
+          return a.name.localeCompare(b.name); // Tie-breaker: sort by file name alphabetically
+        }
+        return timeDiff;
+      });
+
+      res.json({ fileDetails });
+    });
+  } catch (error) {
+    // Catch any other unexpected errors
+    console.log(error);
+    console.error("Error reading directory: ", error);
+    res.status(500).json({ error: "An unexpected error occurred" });
   }
 });
 
