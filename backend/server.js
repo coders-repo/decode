@@ -57,17 +57,29 @@ function cosineSimilarity(vecA, vecB) {
   return dotProduct / (magnitudeA * magnitudeB);
 }
 
-// Function to add data to vector store
-async function addToVectorStore(parsedLine, textChunk, metadata) {
-  // Generate embedding using OpenAI's embeddings model
+// Function to process and vectorize a batch of log lines
+async function processBatch(batch) {
+  const texts = batch.map(item => item.textChunk);  // Extract text for embeddings
   const embeddingResponse = await openai.embeddings.create({
     model: 'text-embedding-ada-002',
-    input: textChunk,
+    input: texts,
   });
-  const vector = embeddingResponse.data[0].embedding;
-  vectorStore.push({
-    vector: vector, // Store the generated vector
-    metadata: parsedLine, // Include metadata like timestamp, log level, error
+
+  // Iterate over the embedding response and store each embedding with its metadata
+  embeddingResponse.data.forEach((embedding, index) => {
+    const vector = embedding.embedding;
+    const parsedLine = batch[index].parsedLine;  // Retrieve the metadata for the current log line
+
+    vectorStore.push({
+      vector: vector,
+      metadata: {
+        timestamp: parsedLine.timestamp,
+        logLevel: parsedLine.logLevel,
+        policyNumber: parsedLine.policyNumber,
+        email: parsedLine.email,
+        error: parsedLine.error,
+      },
+    });
   });
 }
 
@@ -98,21 +110,31 @@ app.post("/api/upload-log", upload.single("file"), async (req, res) => {
       crlfDelay: Infinity,
     });
 
+    const BATCH_SIZE = 1000;  // Batch size for log processing
+    let batch = [];
     let logData = "";
+
+    // Read log lines
     for await (const line of rl) {
       const parsedLine = parseLogLine(line);
       const textChunk = JSON.stringify(parsedLine);
       logData += textChunk + '\n';
 
-      // Add the parsed line and metadata to vectorStore
-      console.log('parsed line',parsedLine);
-      await addToVectorStore(parsedLine, textChunk, {
-        timestamp: parsedLine.timestamp,
-        logLevel: parsedLine.logLevel,
-        policyNumber: parsedLine.policyNumber,
-        error: parsedLine.error,
-      });
+      // Add parsed line and textChunk to the batch
+      batch.push({ parsedLine, textChunk });
+
+      // Process the batch once the size reaches the defined BATCH_SIZE
+      if (batch.length >= BATCH_SIZE) {
+        await processBatch(batch);
+        batch = [];  // Reset batch after processing
+      }
     }
+
+    // Process any remaining lines that were not part of a full batch
+    if (batch.length > 0) {
+      await processBatch(batch);
+    }
+    
     res.json({ message: 'Log file processed and vectorized', vectorStore });
   } catch (error) {
     console.error("Error processing log file:", error);
